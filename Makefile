@@ -153,7 +153,12 @@ UPROGS=\
 	$U/_uptime\
 	$U/_time\
         $U/_sleep\
-        $U/_matmul
+        $U/_matmul\
+	$U/_getprocstest\
+	$U/_prioritytest\
+	$U/_ps\
+        $U/_schedtest\
+        $U/_agingtest
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

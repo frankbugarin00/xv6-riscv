@@ -2,11 +2,18 @@
 
 struct stat;
 struct rusage;
+//PA2 task1: Foward declaration for process statistics
+struct pstat;
 // system calls
 int fork(void);
 int exit(int) __attribute__((noreturn));
 int wait(int *);
 int wait2(int *, struct rusage *);
+// PA2 Task 1: Get information about current processes.
+int getprocs(struct pstat *);
+// PA2 Task 2: priority system calls.
+int getpriority(void);
+int setpriority(int);
 int pipe(int *);
 int write(int, const void *, int);
 int read(int, void *, int);

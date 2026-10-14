@@ -163,6 +163,31 @@ main(void)
       cmd++;
     if (*cmd == '\n') // is a blank command
       continue;
+// PA2 Extra Credit: Display the shell's current priority.
+if(strcmp(cmd, "getpriority\n") == 0){
+  printf("Current priority: %d\n", getpriority());
+  continue;
+}
+ 
+// PA2 Extra Credit: Change the shell's priority.
+if(cmd[0] == 's' && cmd[1] == 'e' &&
+   cmd[2] == 't' && cmd[3] == 'p' &&
+   cmd[4] == 'r' && cmd[5] == 'i' &&
+   cmd[6] == 'o' && cmd[7] == 'r' &&
+   cmd[8] == 'i' && cmd[9] == 't' &&
+   cmd[10] == 'y' && cmd[11] == ' '){
+  int priority = atoi(cmd + 12);
+ 
+  if(priority < 0 || priority > 49){
+    printf("Priority must be between 0 and 49\n");
+  } else if(setpriority(priority) < 0){
+    printf("Failed to set priority\n");
+  } else {
+    printf("Priority set to %d\n", getpriority());
+  }
+ 
+  continue;
+}
     if (cmd[0] == 'c' && cmd[1] == 'd' && cmd[2] == ' ') {
       // Chdir must be called by the parent, not the child.
       cmd[strlen(cmd) - 1] = 0; // chop \n

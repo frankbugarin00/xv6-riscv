@@ -25,6 +25,11 @@ entry("fork");
 entry("exit");
 entry("wait");
 entry("wait2");
+# PA2 Task 1: User-space stub for getprocs system call.
+entry("getprocs");
+# PA2 Task 2: priority system calls.
+entry("getpriority");
+entry("setpriority");
 entry("pipe");
 entry("read");
 entry("write");

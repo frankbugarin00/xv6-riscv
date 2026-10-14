@@ -46,6 +46,18 @@ sys_wait2(void){
   return kwait2(status, rusage);
 }
 
+// PA2 Task 1: System call handler for getprocs.
+uint64
+sys_getprocs(void)
+{
+  uint64 pstats;
+ 
+  // Get the user-space address where process information will be stored.
+  argaddr(0, &pstats);
+ 
+  return kgetprocs(pstats);
+}
+
 uint64
 sys_sbrk(void)
 {
@@ -119,4 +131,27 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+// PA2 Task 2: Return the calling process's current priority.
+uint64
+sys_getpriority(void)
+{
+  struct proc *p = myproc();
+ 
+  return p->priority;
+}
+ 
+// PA2 Task 2: Change the calling process's priority.
+uint64
+sys_setpriority(void)
+{
+  int priority;
+  struct proc *p = myproc();
+ 
+  argint(0, &priority);
+ 
+  p->priority = priority;
+ 
+  return 0;
 }

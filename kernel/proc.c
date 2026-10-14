@@ -4,6 +4,8 @@
 #include "riscv.h"
 #include "spinlock.h"
 #include "proc.h"
+// PA2 Task 1: Defines struct pstat used by getprocs.
+#include "pstat.h"
 #include "defs.h"
 
 struct cpu cpus[NCPU];
@@ -124,6 +126,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->priority = 0; // PA2 Task 2: default priority
   p->cputime = 0; //Start every new process with zero CPU ticks
 
   // Allocate a trapframe page.
@@ -225,7 +228,7 @@ userinit(void)
   initproc = p;
 
   p->cwd = namei("/");
-
+  p->readytime = ticks;   // PA2 Task 3: process enters ready queue
   p->state = RUNNABLE;
 
   release(&p->lock);
@@ -276,6 +279,9 @@ kfork(void)
   }
   np->sz = p->sz;
 
+  // PA2 Task 2: child inherits its parent's priority.
+  np->priority = p->priority;
+
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
@@ -299,6 +305,7 @@ kfork(void)
   release(&wait_lock);
 
   acquire(&np->lock);
+  np->readytime = ticks;   // PA2 Task 3: child enters ready queue
   np->state = RUNNABLE;
   release(&np->lock);
 
@@ -507,6 +514,8 @@ scheduler(void)
     intr_off();
 
     int found = 0;
+    // PA2 Task 4: Use the original round-robin scheduler when selected.
+    #if SCHED_POLICY == SCHED_RR
     for (p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
       if (p->state == RUNNABLE) {
@@ -527,6 +536,75 @@ scheduler(void)
       }
       release(&p->lock);
     }
+    #else
+// PA2 Task 4 and Task 5:
+// Priority-based scheduler with aging.
+// Aging increases the effective priority of waiting processes
+// to help prevent starvation.
+ 
+struct proc *best = 0;
+int highest = -1;
+ 
+// Check every process in the process table.
+for(p = proc; p < &proc[NPROC]; p++){
+  acquire(&p->lock);
+ 
+  // Only consider processes that are ready to run.
+  if(p->state == RUNNABLE){
+ 
+    // Task 5: Calculate how long this process has waited.
+    uint64 waiting = ticks - p->readytime;
+ 
+    // Task 5: Add one priority point per 10 ticks.
+    // Limit the aging bonus to prevent integer overflow.
+    uint64 bonus = waiting / 10;
+    if(bonus > 99){
+      bonus = 99;
+    }
+ 
+    int effective = p->priority + (int)bonus;
+ 
+    // The maximum effective priority is 99.
+    if(effective > 99){
+      effective = 99;
+    }
+ 
+    // Choose the process with the highest effective priority.
+    if(effective > highest){
+      highest = effective;
+      best = p;
+    }
+  }
+ 
+  release(&p->lock);
+}
+ 
+// Task 4 and Task 5:
+// Run the selected process.
+if(best != 0){
+  acquire(&best->lock);
+ 
+  // Verify that the selected process is still runnable.
+  if(best->state == RUNNABLE){
+ 
+    // Change its state to RUNNING.
+    best->state = RUNNING;
+ 
+    // Assign this process to the current CPU.
+    c->proc = best;
+ 
+    // Switch from the scheduler to the selected process.
+    swtch(&c->context, &best->context);
+ 
+    // Restore scheduler state when the process returns.
+    mycpu()->intena = 0;
+    c->proc = 0;
+    found = 1;
+  }
+ 
+  release(&best->lock);
+}
+#endif
     if (found == 0) {
       // nothing to run; stop running on this core until an interrupt.
       asm volatile("wfi");
@@ -567,6 +645,7 @@ yield(void)
 {
   struct proc *p = myproc();
   acquire(&p->lock);
+  p->readytime = ticks;   // PA2 Task 3: process re-enters ready queue
   p->state = RUNNABLE;
   sched();
   release(&p->lock);
@@ -653,6 +732,7 @@ wakeup(void *chan)
       // If this waiting process has gotten so far as to actually
       // go to sleep, also set it back to RUNNING.
       if (p->state == SLEEPING) {
+        p->readytime = ticks;   // PA2 Task 3: awakened process enters ready queue
         p->state = RUNNABLE;
       }
     }
@@ -674,6 +754,7 @@ kkill(int pid)
       p->killed = 1;
       if (p->state == SLEEPING) {
         // Wake process from sleep().
+        p->readytime = ticks;   // PA2 Task 3: killed sleeping process enters ready queue
         p->state = RUNNABLE;
       }
       release(&p->lock);
@@ -763,4 +844,48 @@ procdump(void)
     printk("%d %s %s", p->pid, state, p->name);
     printk("\n");
   }
+}
+
+// PA2 Task 1: Collect process information and copy it to user space.
+int
+kgetprocs(uint64 addr)
+{
+  struct proc *p;
+  struct proc *current = myproc();
+  struct pstat ps;
+  int count = 0;
+ 
+  // Examine every slot in the xv6 process table.
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+ 
+    // Skip unused process-table entries.
+    if(p->state == UNUSED){
+      release(&p->lock);
+      continue;
+    }
+ 
+    // Fill one pstat structure with information about this process.
+    ps.pid = p->pid;
+    ps.state = p->state;
+    ps.size = p->sz;
+    ps.ppid = (p->parent != 0) ? p->parent->pid : 0;
+    safestrcpy(ps.name, p->name, sizeof(ps.name));
+    ps.priority = p->priority;   // PA2 Task 2: copy process priority
+    ps.readytime = p->readytime; // PA2 Task 3: copy ready time
+ 
+    if(copyout(current->pagetable,
+           current->sz,
+           addr + count * sizeof(struct pstat),
+           (char *)&ps,
+           sizeof(struct pstat)) < 0){
+      release(&p->lock);
+      return -1;
+    }
+ 
+    count++;
+    release(&p->lock);
+  }
+ 
+  return count;
 }
